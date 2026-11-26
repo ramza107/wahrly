@@ -1,53 +1,36 @@
-# Wahrly — AI Life Assistant (MVP)
+# Wahrly — app & AI server
 
-Personal AI assistant for everyday life. You tell Wahrly what you need to do — it turns that into tasks, reminders, and a calm daily plan.
+Product idea, Free/Pro and screens: see the [root README](../README.md).
+
+This folder is the **Expo iPhone / Android app** plus the **Express AI backend** (`server/`).
 
 > Wahrly should feel like an AI that happens to have a task list — not a task manager with AI bolted on.
 
 ## Stack
 
-- Expo + React Native + TypeScript + Expo Router
+- Expo 57 + React Native + TypeScript + Expo Router
 - Supabase (Auth + Postgres + RLS)
-- Express AI backend (`POST /api/ai/chat`) with OpenAI
-- Expo Notifications
-- AsyncStorage / Zustand local cache
-- Offline local AI fallback when the server or OpenAI key is missing
+- Express AI backend (`POST /api/ai/chat`, `/api/ai/transcribe`)
+- Groq → OpenAI → on-device local AI fallback
+- Expo Notifications, Zustand, AsyncStorage
+- StoreKit / Play via `expo-iap` (Wahrly Pro)
+- Optional Sentry + PostHog ([`docs/observability.md`](docs/observability.md))
 
 ## Product surface
 
-**Wahrly ships as the iPhone / Android app** (EAS / TestFlight).  
-GitHub Pages is only a static privacy landing: https://ramza107.github.io/wahrly/privacy  
+| Surface | Where |
+|---------|--------|
+| Native app | EAS / TestFlight / App Store — this folder |
+| Landing + Privacy + Terms | [`../site/`](../site/) → [wahrly.com](https://wahrly.com) |
+| AI API | Render (`rootDir: app/server`) — prod: `https://threeproxy-x9bi.onrender.com` |
 
-AI backend (Groq): `https://threeproxy-x9bi.onrender.com`  
-Keys map: [`docs/keys.md`](docs/keys.md).
+Keys map: [`docs/keys.md`](docs/keys.md).  
+Local Expo web is for UI checks only — **not** deployed.
 
-Local Expo web (`npx expo start --web`) is optional for UI checks — it is **not** deployed.
-
-## Installable iPhone & Android (EAS)
-
-One Expo project → native builds. Details: [`docs/mobile-apps.md`](docs/mobile-apps.md).
-TestFlight copy + screenshots: [`docs/testflight-beta.md`](docs/testflight-beta.md).
-
-Optional crash reporting + product analytics: [`docs/observability.md`](docs/observability.md) (Sentry + PostHog; off until you set keys).
+## Quick start
 
 ```bash
-cd nova
-npx eas-cli login
-npx eas-cli init
-
-# TestFlight (friends) — production build + submit
-npm run build:ios:testflight
-
-# Or internal preview on your registered iPhone
-npm run build:ios
-```
-
-Deep link: `wahrly://` (Google Calendar OAuth returns into the app after Allow).
-
-## Quick start (mobile / Expo Go)
-
-```bash
-cd nova
+cd app
 cp .env.example .env
 npm install --legacy-peer-deps
 npm --prefix server install
@@ -55,7 +38,7 @@ npm --prefix server install
 # Terminal 1 — AI server
 npm run server
 
-# Terminal 2 — Expo app
+# Terminal 2 — Expo
 npm start
 ```
 
@@ -63,23 +46,22 @@ npm start
 
 Leave `.env` placeholders as-is.
 
-1. Open the app
-2. Sign up / sign in with any email + password (6+ chars)
-3. Complete onboarding
-4. In Chat, try:
+1. Sign up with any email + password (6+ chars)
+2. Complete onboarding
+3. In Chat, try:
    - `Remind me to call Mom tomorrow at 7 PM`
-   - `I need to clean my apartment, buy food and do laundry tomorrow`
+   - `Завтра купить продукты и постирать`
    - `What do I need to do today?`
    - `I finished buying food`
 
-Tasks appear on **Home** and **Tasks**. Timed tasks schedule local notifications when permissions allow.
+Timed tasks schedule local notifications when permissions allow.
 
-## Configure Supabase + AI (Groq / OpenAI)
+## Configure Supabase + AI
 
 1. Create a Supabase project
 2. Run `supabase/schema.sql` in the SQL editor
-3. Enable Email auth
-4. Get a **free Groq key**: [console.groq.com/keys](https://console.groq.com/keys)
+3. Enable Email auth (+ Apple / Google if needed — [`docs/social-auth-setup.md`](docs/social-auth-setup.md))
+4. Get a Groq key: [console.groq.com/keys](https://console.groq.com/keys)
 5. Fill `.env`:
 
 ```env
@@ -94,78 +76,64 @@ SUPABASE_URL=...
 SUPABASE_SERVICE_ROLE_KEY=...
 ```
 
-6. Restart Expo and the AI server
+> Never put `GROQ_API_KEY` / `OPENAI_API_KEY` in the mobile app. Only the server uses them.  
+> Provider order: **Groq → OpenAI → local AI**.
 
-> Never put `GROQ_API_KEY` / `OPENAI_API_KEY` in the mobile app. Only the server uses them.
-> Provider order: Groq → OpenAI → built-in local AI.
->
-> **Where production keys live:** [`docs/keys.md`](docs/keys.md) — iPhone = EAS, website = preview only, Render = server secrets.
+## Native builds (EAS)
+
+```bash
+cd app
+npx eas-cli login
+
+npm run build:ios:testflight   # production + submit
+npm run build:ios              # preview on registered device
+npm run build:android
+```
+
+Deep link: `wahrly://` (Google Calendar OAuth returns into the app after Allow).
+
+Details: [`docs/mobile-apps.md`](docs/mobile-apps.md) · TestFlight copy: [`docs/testflight-beta.md`](docs/testflight-beta.md) · App Store listing: [`docs/app-store-listing.md`](docs/app-store-listing.md).
 
 ## Deploy AI server (Render)
 
-Самый простой вариант для продакшена — [Render](https://render.com) (есть free tier).
-
-### 1. Запушь репозиторий на GitHub
-Убедись, что ветка с `app/server` уже на GitHub.
-
-### 2. Создай Web Service на Render
-1. [dashboard.render.com](https://dashboard.render.com) → **New** → **Web Service**
-2. Подключи репозиторий `ramza107/3proxy`
-3. Настройки:
+1. [dashboard.render.com](https://dashboard.render.com) → **New** → **Web Service** (or Blueprint from root `render.yaml`)
+2. Settings:
    - **Root Directory:** `app/server`
-   - **Runtime:** Node
-   - **Build Command:** `npm ci`
-   - **Start Command:** `npm start`
-   - **Health Check Path:** `/health`
-4. Environment variables:
-   - `GROQ_API_KEY` = ключ с [console.groq.com/keys](https://console.groq.com/keys) *(рекомендуется, free tier)*
-   - `GROQ_MODEL` = `openai/gpt-oss-20b` (или другая модель Groq)
-   - `OPENAI_API_KEY` = опциональный fallback
-   - `OPENAI_MODEL` = `gpt-4o-mini`
-   - `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` = опционально
-
-Приоритет провайдера: **Groq → OpenAI → local AI**.
-
-Или через Blueprint: в корне репо есть `render.yaml` → **New** → **Blueprint**.
-
-### 3. Проверь
-После деплоя Render даст URL вида `https://nova-ai-xxxx.onrender.com`.
-
-```bash
-curl https://YOUR-SERVICE.onrender.com/health
-# {"ok":true,"openai":true}
-```
-
-### 4. Подключи приложение
-В `nova/.env` (и в GitHub Pages / EAS secrets):
+   - **Build:** `npm ci --omit=dev` (or as in `render.yaml`)
+   - **Start:** `npm start`
+   - **Health:** `/health`
+3. Secrets: `GROQ_API_KEY`, optional `OPENAI_API_KEY`, `SUPABASE_*`, `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`
+4. Point the app at the service URL:
 
 ```env
 EXPO_PUBLIC_API_URL=https://YOUR-SERVICE.onrender.com
 ```
 
-Пересобери веб/приложение. Чат пойдёт на сервер → OpenAI.
+```bash
+curl https://YOUR-SERVICE.onrender.com/health
+```
 
-> Free tier на Render «засыпает» без трафика (~50с cold start). Для продакшена лучше платный Starter.
-
-### Docker (любой хост)
+### Docker
 
 ```bash
 cd app/server
-docker build -t nova-ai .
-docker run -p 8787:8787 -e OPENAI_API_KEY=sk-... nova-ai
+docker build -t wahrly-ai .
+docker run -p 8787:8787 -e GROQ_API_KEY=gsk_... wahrly-ai
 ```
 
 ## Project structure
 
 ```
-nova/
-├── app/                 # Expo Router screens
+app/
+├── app/                 # Expo Router screens (tabs, auth, onboarding)
 ├── components/
-├── lib/                 # supabase, api, store, notifications
-├── services/            # AI action application
-├── server/              # Express OpenAI endpoint
+├── constants/           # Theme, brand
+├── lib/                 # store, i18n, pro gates, supabase, api
+├── services/            # AI actions, IAP, local AI
+├── server/              # Express: chat, transcribe, google, news
+├── widgets/             # iOS Home Screen widget
 ├── supabase/schema.sql
-├── types/
+├── docs/
 ├── .env.example
 └── README.md
 ```
@@ -183,8 +151,6 @@ nova/
 }
 ```
 
-Response:
-
 ```json
 {
   "reply": "Done. I'll remind you tomorrow at 6 PM.",
@@ -201,23 +167,24 @@ Response:
 
 Supported actions: `create_task`, `update_task`, `complete_task`, `delete_task`, `create_reminder`.
 
-## Screens
+## Free vs Pro (gates)
 
-- **Home** — greeting, today plan, calendar rail, composer
-- **Chat** — primary AI interface
-- **Tasks** — Today / Tomorrow / Upcoming / Completed
-- **Settings** — name, Google Calendar connect, morning/evening rituals, AI tone, sign out
+Aligned with `lib/pro.ts` and [`docs/unit-economics.md`](docs/unit-economics.md):
+
+- **Free:** Tasks, Dates, on-device chat, Home, Settings, readonly Calendar
+- **Pro:** Bills, Shopping, Life, News, Invest, Plan day, morning / evening / weekly rituals, reminders, widget, cloud chat (~400/day), voice (~200/day)
+
+SKU: `com.wahrly.assistant.pro.monthly`.
 
 ## Google Calendar (readonly)
 
-**For users:** Settings → **Connect Google Calendar** → tap **Allow** on Google’s screen. No passwords.
-
-**For the app owner (once):** follow [`docs/google-calendar-oauth.md`](docs/google-calendar-oauth.md) — add `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` on Render.
+**Users:** Settings → Connect Google Calendar → Allow.  
+**Owner setup:** [`docs/google-calendar-oauth.md`](docs/google-calendar-oauth.md).
 
 ## Voice
 
-Mic button is present and wired for future speech-to-text. MVP accepts typed text (or pasted transcripts) through the same AI pipeline.
+Mic → server transcription → same AI action pipeline. Pro-only (Whisper / STT cost). Free uses typed / on-device chat.
 
-## MVP boundaries
+## Product boundaries
 
-Not included yet: banking, shopping, WhatsApp automation, maps, bookings, social, subscriptions, ads, mail reading. Google Calendar is readonly (today’s events on the Home rail).
+Wahrly does **not** read email, access banking, automate WhatsApp, or run ads. Calendar is readonly. Shopping / Bills / Life spaces are Pro features — not Free.
